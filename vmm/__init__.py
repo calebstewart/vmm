@@ -1,6 +1,11 @@
 from typing import List
 from pathlib import Path
 from xml.etree import ElementTree
+import tempfile
+import subprocess
+import os
+import shutil
+import sys
 
 import typer
 import libvirt
@@ -29,12 +34,9 @@ def main():
         logger.error("failed to connect to libvirt: {exc}", exc=str(exc))
         return
 
-    domains: List[Domain] = []
-
-    domainNames = conn.listDefinedDomains()
-    for domain in domainNames:
-        domInfo = conn.lookupByName(domain)
-        domains.append(Domain.from_virdomain(domInfo))
+    domains: List[Domain] = [
+        Domain.from_virdomain(domInfo) for domInfo in conn.listAllDomains()
+    ]
 
     main_menu(conn, domains)
 
@@ -159,6 +161,7 @@ def interact_with_vm(conn: libvirt.virConnect, domains: List[Domain], domain: Do
     ACTION_MOVE = Item("\uf07b  Move To...")
     ACTION_ADD_LABEL = Item("\uf02b  Add Label")
     ACTION_REMOVE_LABEL = Item("\uf02b  Remove Label")
+    ACTION_EDIT_XML = Item("\uf044  Edit XML")
 
     while True:
 
@@ -188,6 +191,7 @@ def interact_with_vm(conn: libvirt.virConnect, domains: List[Domain], domain: Do
                 ACTION_MOVE,
                 ACTION_ADD_LABEL,
                 ACTION_REMOVE_LABEL,
+                ACTION_EDIT_XML,
             ]
         )
 
@@ -221,6 +225,55 @@ def interact_with_vm(conn: libvirt.virConnect, domains: List[Domain], domain: Do
             do_domain_remove_label(conn, domain)
         elif selected == ACTION_RESTORE_SNAPSHOT:
             do_domain_revert(conn, domain)
+        elif selected == ACTION_EDIT_XML:
+            do_domain_edit(conn, domain)
+
+
+def do_domain_edit(conn: libvirt.virConnect, domain: Domain):
+    """Edit a Domain XML"""
+
+    interactive = sys.stdout.isatty() and sys.stdin.isatty()
+    if not interactive:
+        command = config.noninteractive_editor
+        editor_kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    else:
+        editor = shutil.which(os.environ.get("EDITOR", "vim"))
+        if editor is None:
+            Fzf.notify("could not find suitable editor")
+            return
+        command = [editor]
+        editor_kwargs = {}
+
+    with tempfile.NamedTemporaryFile("w+", suffix=".xml") as filp:
+
+        while True:
+            domInfo = domain.lookup(conn)
+            original = domInfo.XMLDesc()
+            filp.seek(0)
+            filp.truncate(0)
+            filp.write(original)
+            filp.flush()
+
+            try:
+                subprocess.run([*command, filp.name], check=True, **editor_kwargs)
+            except subprocess.CalledProcessError as exc:
+                Fzf.notify("editor had non-zero exit status; aborting domain edit.")
+                return
+
+            try:
+                subprocess.run(["virt-xml-validate", filp.name], check=True)
+                filp.seek(0)
+
+                new_xml = filp.read()
+                if new_xml == original:
+                    Fzf.notify("no changes for domain '{domain}'", domain=domain.path)
+                else:
+                    conn.defineXML(filp.read())
+                    Fzf.notify("updated domain '{domain}'", domain=domain.path)
+                break
+            except subprocess.CalledProcessError as exc:
+                Fzf.notify("invalid domain XML")
+                input()
 
 
 class SnapshotItem(Item):

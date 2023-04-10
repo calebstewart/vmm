@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 import json
 
 from pydantic import BaseSettings
@@ -11,6 +11,7 @@ class Config(BaseSettings):
 
     connect_uri: str = "qemu:///system"
     """ The URL of the libvirt connection """
+    noninteractive_editor: List[str] = ["alacritty", "-e", "vim"]
 
     @classmethod
     def locate_config(cls) -> Path:
