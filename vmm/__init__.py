@@ -20,6 +20,30 @@ app = typer.Typer()
 config = Config()
 
 
+class FolderItem(Item):
+    def __init__(self, path: Path):
+        super().__init__(f"\uf07b  {path}", bold=True)
+        self.path = path
+
+
+class DomainItem(Item):
+    def __init__(self, domain: Domain):
+        super().__init__(f"\uf233  {domain.name}")
+        self.domain = domain
+
+
+class LabelItem(Item):
+    def __init__(self, label: str):
+        super().__init__(f"\uf02b  {label}")
+        self.label = label
+
+
+class SnapshotItem(Item):
+    def __init__(self, snapshot: libvirt.virDomainSnapshot):
+        super().__init__(f"\uf030  {snapshot.getName()}")
+        self.snapshot = snapshot
+
+
 @app.command()
 def main():
     """Open the VM Manager Menu"""
@@ -45,12 +69,19 @@ def main_menu(conn: libvirt.virConnect, domains: List[Domain]):
     """Show the main menu"""
 
     CREATE_VM = Item("\u002b  Create Virtual Machine")
-    BROWSE_ALL = Item("\uf233  Browse All")
+    BROWSE_ALL = Item("\uf0ac  Browse All")
     BROWSE_BY_PATH = Item("\uf07b  Browse VM Folders")
     BROWSE_BY_LABEL = Item("\uf02b  Browse VM Labels")
 
     while True:
-        selected = Fzf.prompt("> ", [CREATE_VM, BROWSE_BY_PATH, BROWSE_BY_LABEL])
+        options = [CREATE_VM, BROWSE_ALL, BROWSE_BY_PATH, BROWSE_BY_LABEL]
+
+        # Add any active domains to the list
+        for domain in domains:
+            if domain.lookup(conn).isActive():
+                options.append(DomainItem(domain))
+
+        selected = Fzf.prompt("> ", options)
         if selected is None:
             logger.warning("aborted")
             return
@@ -62,24 +93,24 @@ def main_menu(conn: libvirt.virConnect, domains: List[Domain]):
             browse_by_label(conn, domains)
         elif selected == BROWSE_ALL:
             browse_all(conn, domains)
+        elif isinstance(selected, DomainItem):
+            interact_with_vm(conn, domains, selected.domain)
 
 
-class FolderItem(Item):
-    def __init__(self, path: Path):
-        super().__init__(f"\uf07b  {path}", bold=True)
-        self.path = path
+def browse_all(conn: libvirt.virConnect, domains: List[Domain]):
+    """Browse all VMs as one long list"""
 
+    while True:
+        options: List[Item] = sorted(
+            [DomainItem(domain) for domain in domains],
+            key=lambda item: item.domain.name,
+        )
 
-class DomainItem(Item):
-    def __init__(self, domain: Domain):
-        super().__init__(f"\uf233  {domain.name}")
-        self.domain = domain
-
-
-class LabelItem(Item):
-    def __init__(self, label: str):
-        super().__init__(f"\uf02b  {label}")
-        self.label = label
+        item = Fzf.prompt(f"browse[all]> ", options)
+        if item is None:
+            return
+        elif isinstance(item, DomainItem):
+            interact_with_vm(conn, domains, item.domain)
 
 
 def browse_by_path(conn: libvirt.virConnect, domains: List[Domain], path: Path):
@@ -162,6 +193,7 @@ def interact_with_vm(conn: libvirt.virConnect, domains: List[Domain], domain: Do
     ACTION_ADD_LABEL = Item("\uf02b  Add Label")
     ACTION_REMOVE_LABEL = Item("\uf02b  Remove Label")
     ACTION_EDIT_XML = Item("\uf044  Edit XML")
+    ACTION_OPEN = Item("\uf26c  Open Viewer")
 
     while True:
 
@@ -174,7 +206,9 @@ def interact_with_vm(conn: libvirt.virConnect, domains: List[Domain], domain: Do
         actions = []
 
         if domInfo.isActive():
-            actions.extend([ACTION_SHUTDOWN, ACTION_FORCE_OFF, ACTION_SAVE_STATE])
+            actions.extend(
+                [ACTION_OPEN, ACTION_SHUTDOWN, ACTION_FORCE_OFF, ACTION_SAVE_STATE]
+            )
         elif domInfo.hasManagedSaveImage():
             actions.extend(
                 [ACTION_RESTORE_STATE, ACTION_REMOVE_STATE, ACTION_CLEAN_START]
@@ -227,6 +261,26 @@ def interact_with_vm(conn: libvirt.virConnect, domains: List[Domain], domain: Do
             do_domain_revert(conn, domain)
         elif selected == ACTION_EDIT_XML:
             do_domain_edit(conn, domain)
+        elif selected == ACTION_OPEN:
+            subprocess.Popen(
+                [
+                    "virt-viewer",
+                    "--connect",
+                    config.connect_uri,
+                    "--auto-resize",
+                    "always",
+                    "--cursor",
+                    "auto",
+                    "--reconnect",
+                    "--wait",
+                    "--uuid",
+                    "--shared",
+                    str(domain.uuid),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
 
 
 def do_domain_edit(conn: libvirt.virConnect, domain: Domain):
@@ -274,12 +328,6 @@ def do_domain_edit(conn: libvirt.virConnect, domain: Domain):
             except subprocess.CalledProcessError as exc:
                 Fzf.notify("invalid domain XML")
                 input()
-
-
-class SnapshotItem(Item):
-    def __init__(self, snapshot: libvirt.virDomainSnapshot):
-        super().__init__(f"\uf030  {snapshot.getName()}")
-        self.snapshot = snapshot
 
 
 def do_domain_revert(conn: libvirt.virConnect, domain: Domain):
