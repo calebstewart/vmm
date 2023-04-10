@@ -254,20 +254,31 @@ def do_domain_revert(conn: libvirt.virConnect, domain: Domain):
 def do_domain_move(conn: libvirt.virConnect, domains: List[Domain], domain: Domain):
     """Move the domain path tag"""
 
-    paths = set([d.metadata.path for d in domains])
-
-    new_dir = Fzf.ask(
-        f"move-domain[{domain.path}]> ", options=[Item(str(path)) for path in paths]
+    options = [Item("\u002b  New Folder")]
+    options.extend(
+        sorted(
+            [FolderItem(path) for path in set([d.metadata.path for d in domains])],
+            key=lambda item: item.path,
+        )
     )
 
-    if new_dir is None:
+    item = Fzf.prompt(f"move-domain[{domain.path}]> ", options=options)
+    if item is None:
         return
+    elif isinstance(item, FolderItem):
+        new_path = item.path
+    else:
+        value = Fzf.ask(f"new-folder[{domain.name}]> ", options=[Item("")])
+        if value is None:
+            return
+        else:
+            new_path = Path(value)
 
-    domain.metadata.path = Path(new_dir)
+    domain.metadata.path = new_path
     domain.update(conn)
 
     Fzf.notify(
-        "moved domain '{domain}' to '{new_dir}'", domain=domain.name, new_dir=new_dir
+        "moved domain '{domain}' to '{new_dir}'", domain=domain.name, new_dir=new_path
     )
 
 
