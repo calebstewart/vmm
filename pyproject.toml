@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "vmmgr"
+name = "vmm"
 version = "0.1.0"
-description = "Virtual Machine Manager utlizing Wofi Menus"
+description = "Simple libvirt Virtual Machine Manager"
 authors = ["Caleb Stewart <caleb.stewart94@gmail.com>"]
 license = "MIT"
 readme = "README.md"
@@ -18,7 +18,7 @@ loguru = "^0.6.0"
 pydantic-xml = "^0.6.0"
 
 [tool.poetry.scripts]
-vmmgr = "vmmgr:app"
+vmm = "vmm:app"
 
 [build-system]
 requires = ["poetry-core"]

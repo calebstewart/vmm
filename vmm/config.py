@@ -16,11 +16,11 @@ class Config(BaseSettings):
     def locate_config(cls) -> Path:
 
         for path in [xdg_config_home(), *list(xdg_config_dirs())]:
-            cfg_path = path / "vmmgr" / "config.toml"
+            cfg_path = path / "vmm" / "config.toml"
             if cfg_path.is_file():
                 return cfg_path
 
-        return xdg_config_home() / "vmmgr" / "config.toml"
+        return xdg_config_home() / "vmm" / "config.toml"
 
     def save(self):
         """Save the current configuration to the user config directory"""
@@ -55,7 +55,7 @@ def xdg_toml_settings_source(settings: BaseSettings) -> Dict[str, Any]:
 
     for path in [xdg_config_home(), *list(xdg_config_dirs())]:
         try:
-            with (path / "vmmgr" / "config.toml").open(
+            with (path / "vmm" / "config.toml").open(
                 "r", encoding=settings.__config__.env_file_encoding
             ) as filp:
                 return toml.load(filp)

@@ -19,32 +19,32 @@ connects by creating a child QCOW2 disk image during the clone. This will not wo
 but will work just fine when running locally.
 
 This tool accomplishes directory-like organization and labeling by using `libvirt` application-
-specific metadata attached to VMs. Specifically, it adds a `vmmgr` element to the `metadata` of
+specific metadata attached to VMs. Specifically, it adds a `vmm` element to the `metadata` of
 `libvirt` domains, which contains the virtual directory path of the VM, and a list of labels.
 The metadata structure looks like this:
 
 ``` xml
-<vmmgr:vmmgr xmlns:vmmgr="http://calebstew.art/xmlns/vmmgr">
-    <vmmgr:path>/symbolic/vm/organization/path</vmmgr:path>
-    <vmmgr:label>arbitrary-label</vmmgr:label>
-    <vmmgr:label>another-label</vmmgr:label>
-</vmmgr:vmmgr>
+<vmm:vmm xmlns:vmm="http://calebstew.art/xmlns/vmm">
+    <vmm:path>/symbolic/vm/organization/path</vmm:path>
+    <vmm:label>arbitrary-label</vmm:label>
+    <vmm:label>another-label</vmm:label>
+</vmm:vmm>
 ```
 
 It's worth noting that this directory-like virtual path is not related to any on-disk path. The
 VM definition and disk images are managed fully by `libvirt`. The path stored here is purely
-for organization and is only interpreted by `vmmgr`. With that in mind, moving VMs between
+for organization and is only interpreted by `vmm`. With that in mind, moving VMs between
 these "pseudo-paths" is instantaneous. It is simply modifying the VM metadata.
 
 The metadata information will not be modified on any VM unless you modify it by adding tags or
 moving the VM within the virtual directory structure. The tool will work seamlessly with VMs
 which do not have this metadata.  The defaults for these fields is simply an empty tag list
-and a path of `/`. This enables `vmmgr` to work in tandem with VMs created, managed or used
+and a path of `/`. This enables `vmm` to work in tandem with VMs created, managed or used
 from other `libvirt` clients while still providing an intuitive interface for interacting with VMs.
 For existing VMs, the default empty values will be loaded and no modifications will be made
 until requested.
 
-Currently, `vmmgr` supports the following:
+Currently, `vmm` supports the following:
 - Organize VMs in a directory-like structure, and browse those VMs
 - Add/remove arbitrary tags on VMs
 - Browse VMs by tag

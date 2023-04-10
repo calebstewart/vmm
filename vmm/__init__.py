@@ -6,10 +6,10 @@ import typer
 import libvirt
 from loguru import logger
 
-from vmmgr.wofi import wofi, Mode, WofiError
-from vmmgr.config import Config
-from vmmgr.model import Domain
-from vmmgr.menu import Item, Fzf
+from vmm.wofi import wofi, Mode, WofiError
+from vmm.config import Config
+from vmm.model import Domain
+from vmm.menu import Item, Fzf
 
 app = typer.Typer()
 config = Config()

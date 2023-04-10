@@ -6,11 +6,11 @@ from pydantic_xml import BaseXmlModel, element
 from pydantic import BaseModel
 import libvirt
 
-NSMAP = {"vmmgr": "http://calebstew.art/vmmgr"}
-NAMESPACE = "http://calebstew.art/xmlns/vmmgr"
+NSMAP = {"vmm": "http://calebstew.art/vmm"}
+NAMESPACE = "http://calebstew.art/xmlns/vmm"
 
 
-class ManagerMetadata(BaseXmlModel, tag="vmmgr"):
+class ManagerMetadata(BaseXmlModel, tag="vmm"):
     path: Path = element(default=Path("/"))
     labels: List[str] = element(tag="label", default=[])
 
@@ -37,7 +37,7 @@ class Domain(BaseModel):
         dom.setMetadata(
             libvirt.VIR_DOMAIN_METADATA_ELEMENT,
             self.metadata.to_xml(encoding="utf-8").decode("utf-8"),
-            "vmmgr",
+            "vmm",
             NAMESPACE,
         )
 

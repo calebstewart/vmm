@@ -4,7 +4,7 @@ from abc import ABC, abstractclassmethod
 from iterfzf import iterfzf
 from loguru import logger
 
-from vmmgr.wofi import wofi, Mode, WofiError
+from vmm.wofi import wofi, Mode, WofiError
 
 
 class Item(object):
