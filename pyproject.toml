@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "vmmgr"
+version = "0.1.0"
+description = "Virtual Machine Manager utlizing Wofi Menus"
+authors = ["Caleb Stewart <caleb.stewart94@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+typer = {extras = ["all"], version = "^0.7.0"}
+xdg-base-dirs = "^6.0.0"
+pydantic = "^1.10.7"
+iterfzf = "^0.5.0.20.0"
+libvirt-python = "^9.2.0"
+toml = "^0.10.2"
+loguru = "^0.6.0"
+pydantic-xml = "^0.6.0"
+
+[tool.poetry.scripts]
+vmmgr = "vmmgr:app"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
