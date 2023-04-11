@@ -91,7 +91,7 @@ class Fzf(Provider):
     def ask(cls, prompt: str, options: Iterable[Item] | None = None) -> str:
 
         return iterfzf(
-            (item.text for item in options or []),
+            (item.text for item in options) if options else [""],
             prompt=prompt,
             print_query=True,
             exact=False,

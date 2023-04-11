@@ -6,9 +6,11 @@ import subprocess
 import os
 import shutil
 import sys
+import uuid
 
 import typer
 import libvirt
+from rich.console import Console
 from loguru import logger
 
 from vmm.wofi import wofi, Mode, WofiError
@@ -18,6 +20,7 @@ from vmm.menu import Item, Fzf
 
 app = typer.Typer()
 config = Config()
+console = Console()
 
 
 class FolderItem(Item):
@@ -308,9 +311,178 @@ def interact_with_vm(conn: libvirt.virConnect, domains: List[Domain], domain: Do
                 "Starting looking-glass for domain '{domain}'", domain=domain.path
             )
             sys.exit(0)
+        elif selected == ACTION_LINKED_CLONE:
+            do_domain_clone(conn, domains, domain, copy_on_write=True)
+        elif selected == ACTION_HEAVY_CLONE:
+            do_domain_clone(conn, domains, domain, copy_on_write=False)
 
         if config.exit_after_action:
             sys.exit(0)
+
+
+def do_domain_clone(
+    conn: libvirt.virConnect, domains: List[Domain], domain: Domain, copy_on_write: bool
+):
+    """Create a linked clone of the specified domain"""
+
+    # Lookup the domain information
+    domInfo = domain.lookup(conn)
+    root = ElementTree.fromstring(domInfo.XMLDesc())
+
+    # Ask for the new VM name
+    new_name = Fzf.ask(f"domain-linked-clone[{domain.path}] clone name> ")
+    if new_name is None:
+        return
+
+    new_uuid = uuid.uuid4()
+
+    # Update the name field in the domain XMl
+    name = root.find("./name")
+    if name is None:
+        name = ElementTree.SubElement(root, "name")
+    name.text = new_name
+
+    # Generate a new domain UUID
+    uuidElem = root.find("./uuid")
+    if uuidElem is None:
+        uuidElem = ElementTree.SubElement(root, "uuid")
+    uuidElem.text = str(new_uuid)
+
+    logger.debug(
+        "building domain specification for {name} ({uuid})",
+        name=new_name,
+        uuid=new_uuid,
+    )
+
+    for disk in root.findall("devices/disk"):
+        targetElem = disk.find("./target")
+        if targetElem is None:
+            logger.debug(
+                "  {domain}: ignoring disk with no target element", domain=domain.name
+            )
+            continue
+
+        disk_name = targetElem.attrib["dev"]
+
+        if disk.find("readonly") is not None:
+            logger.debug(
+                "  {domain}: {disk}: leaving read-only disk unchanged",
+                domain=new_name,
+                disk=disk_name,
+            )
+            continue
+
+        with console.status(f"cloning {disk_name}"):
+            do_domain_disk_clone(conn, domain, new_name, disk_name, disk, copy_on_write)
+
+    # Define the new cloned VM
+    cloneInfo = conn.defineXML(
+        ElementTree.tostring(root, encoding="unicode", method="xml")
+    )
+
+    domains.append(Domain.from_virdomain(cloneInfo))
+
+
+def do_domain_disk_clone(
+    conn: libvirt.virConnect,
+    domain: Domain,
+    cloneName: str,
+    disk_name: str,
+    disk: ElementTree.Element,
+    copy_on_write: bool,
+):
+    """Clone an individual disk from the given domain. The disk element is assumed to be from
+    the in-progress domain clone, and will be updated to refer to the new cloned disk."""
+
+    logger.debug(
+        "  {domain}: {disk}: cloning read-write disk",
+        domain=cloneName,
+        disk=disk_name,
+    )
+
+    sourceElem = disk.find("./source")
+    if sourceElem is None:
+        logger.debug(
+            "  {domain}: {disk}: skipping because no source element found",
+            domain=cloneName,
+            disk=disk_name,
+        )
+        return
+
+    source_path = sourceElem.attrib["file"]
+
+    backingVolume = conn.storageVolLookupByPath(source_path)
+    if backingVolume is None:
+        logger.error(
+            "  {domain}: {disk}: could not find backing storage volume",
+            domain=cloneName,
+            disk=disk_name,
+        )
+        return
+
+    # Look up the backing storage pool (place the clone in the same pool)
+    backingPool = backingVolume.storagePoolLookupByVolume()
+
+    # Parse the backing volume to extract the volume and target types
+    backingVolumeElem = ElementTree.fromstring(backingVolume.XMLDesc())
+    volumeType = backingVolumeElem.attrib["type"]
+
+    # Lookup the target type
+    backingVolumeTargetFormat = backingVolumeElem.find("./target/format")
+    if backingVolumeTargetFormat is None:
+        targetFormat = None
+    else:
+        targetFormat = backingVolumeTargetFormat.attrib["type"]
+
+    # Create the new volume XML tree and add our clone name
+    newVolumeTree = ElementTree.Element("volume", type=volumeType)
+    ElementTree.SubElement(newVolumeTree, "name").text = f"{cloneName}.qcow2"
+
+    # Set the target format if we know it
+    if targetFormat is not None:
+        newVolumeTarget = ElementTree.SubElement(newVolumeTree, "target")
+        ElementTree.SubElement(newVolumeTarget, "format", type=targetFormat)
+
+    # Use a backing store for qcow2 images
+    # This means that for non-qcow2 images, we default to a raw clone
+    if targetFormat == "qcow2" and copy_on_write:
+        backingStore = ElementTree.SubElement(newVolumeTree, "backingStore")
+        ElementTree.SubElement(backingStore, "path").text = source_path
+        ElementTree.SubElement(backingStore, "format", type=targetFormat)
+
+        # Create the new clone using a backing store
+        newVolume = backingPool.createXML(
+            ElementTree.tostring(newVolumeTree, encoding="unicode", method="xml")
+        )
+
+        logger.debug(
+            "  {domain}: {disk}: created backed volume clone: {volume}",
+            domain=cloneName,
+            disk=disk_name,
+            volume=newVolume.name(),
+        )
+    else:
+        newVolume = backingPool.createXMLFrom(
+            ElementTree.tostring(newVolumeTree, encoding="unicode", method="xml"),
+            backingVolume,
+        )
+
+        logger.debug(
+            "  {domain}: {disk}: copied existing volume: {volume}",
+            domain=cloneName,
+            disk=disk_name,
+            volume=newVolume.name(),
+        )
+
+    # Retrive the disk source element
+    diskSource = disk.find("./source")
+    if diskSource is None:
+        diskSource = ElementTree.SubElement(disk, "source")
+
+    # Update the source to point to our new volume
+    diskSource.attrib["file"] = newVolume.path()
+
+    return newVolume.path()
 
 
 def do_domain_edit(conn: libvirt.virConnect, domain: Domain):

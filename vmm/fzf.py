@@ -41,7 +41,7 @@ def iterfzf(
     encoding=None,
     executable=BUNDLED_EXECUTABLE or EXECUTABLE_NAME,
 ):
-    cmd = [executable, "--no-sort", "--prompt=" + prompt, "--height=100%"]
+    cmd = [executable, "--no-sort", "--prompt=" + prompt]  # , "--height=100%"]
     if not extended:
         cmd.append("--no-extended")
     if case_sensitive is not None:

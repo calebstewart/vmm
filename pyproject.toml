@@ -16,6 +16,7 @@ libvirt-python = "^9.2.0"
 toml = "^0.10.2"
 loguru = "^0.6.0"
 pydantic-xml = "^0.6.0"
+rich = ">=10.11.0,<13.00"
 
 [tool.poetry.scripts]
 vmm = "vmm:app"
