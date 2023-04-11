@@ -12,6 +12,9 @@ class Config(BaseSettings):
     connect_uri: str = "qemu:///system"
     """ The URL of the libvirt connection """
     noninteractive_editor: List[str] = ["alacritty", "-e", "vim"]
+    """ Command to run a non-interactive editor """
+    exit_after_action: bool = False
+    """ Whether to exit after completing an action """
 
     @classmethod
     def locate_config(cls) -> Path:

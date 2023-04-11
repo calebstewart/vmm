@@ -45,7 +45,7 @@ class SnapshotItem(Item):
 
 
 @app.command()
-def main():
+def main(exit: bool = False):
     """Open the VM Manager Menu"""
 
     # Silence libvirt
@@ -61,6 +61,8 @@ def main():
     domains: List[Domain] = [
         Domain.from_virdomain(domInfo) for domInfo in conn.listAllDomains()
     ]
+
+    config.exit_after_action = exit
 
     main_menu(conn, domains)
 
@@ -194,6 +196,7 @@ def interact_with_vm(conn: libvirt.virConnect, domains: List[Domain], domain: Do
     ACTION_REMOVE_LABEL = Item("\uf02b  Remove Label")
     ACTION_EDIT_XML = Item("\uf044  Edit XML")
     ACTION_OPEN = Item("\uf26c  Open Viewer")
+    ACTION_LOOKING_GLASS = Item("\uf26c  Open Looking Glass")
 
     while True:
 
@@ -207,7 +210,13 @@ def interact_with_vm(conn: libvirt.virConnect, domains: List[Domain], domain: Do
 
         if domInfo.isActive():
             actions.extend(
-                [ACTION_OPEN, ACTION_SHUTDOWN, ACTION_FORCE_OFF, ACTION_SAVE_STATE]
+                [
+                    ACTION_OPEN,
+                    ACTION_LOOKING_GLASS,
+                    ACTION_SHUTDOWN,
+                    ACTION_FORCE_OFF,
+                    ACTION_SAVE_STATE,
+                ]
             )
         elif domInfo.hasManagedSaveImage():
             actions.extend(
@@ -264,6 +273,7 @@ def interact_with_vm(conn: libvirt.virConnect, domains: List[Domain], domain: Do
         elif selected == ACTION_OPEN:
             subprocess.Popen(
                 [
+                    "setsid",
                     "virt-viewer",
                     "--connect",
                     config.connect_uri,
@@ -281,6 +291,26 @@ def interact_with_vm(conn: libvirt.virConnect, domains: List[Domain], domain: Do
                 stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL,
             )
+            Fzf.notify("Starting virt-viewer for domain '{domain}'", domain=domain.path)
+            sys.exit(0)
+        elif selected == ACTION_LOOKING_GLASS:
+            subprocess.Popen(
+                [
+                    "setsid",
+                    "looking-glass-client",
+                    str(domain.uuid),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
+            Fzf.notify(
+                "Starting looking-glass for domain '{domain}'", domain=domain.path
+            )
+            sys.exit(0)
+
+        if config.exit_after_action:
+            sys.exit(0)
 
 
 def do_domain_edit(conn: libvirt.virConnect, domain: Domain):

@@ -1,10 +1,11 @@
 from typing import Iterable, Any
 from abc import ABC, abstractclassmethod
+import subprocess
 
-from iterfzf import iterfzf
 from loguru import logger
 
 from vmm.wofi import wofi, Mode, WofiError
+from vmm.fzf import iterfzf
 
 
 class Item(object):
@@ -98,4 +99,17 @@ class Fzf(Provider):
 
     @classmethod
     def notify(cls, message: str, **kwargs):
-        logger.info(message, **kwargs)
+
+        try:
+            subprocess.run(
+                [
+                    "notify-send",
+                    "Virtual Machine Manager",
+                    message.format(**kwargs),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
+        except subprocess.CalledProcessError:
+            logger.info(message, **kwargs)
