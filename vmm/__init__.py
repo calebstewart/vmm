@@ -312,17 +312,25 @@ def interact_with_vm(conn: libvirt.virConnect, domains: List[Domain], domain: Do
             )
             sys.exit(0)
         elif selected == ACTION_LINKED_CLONE:
-            do_domain_clone(conn, domains, domain, copy_on_write=True)
+            newDomain = do_domain_clone(conn, domains, domain, copy_on_write=True)
+            if newDomain is not None:
+                return interact_with_vm(conn, domains, newDomain)
         elif selected == ACTION_HEAVY_CLONE:
-            do_domain_clone(conn, domains, domain, copy_on_write=False)
+            newDomain = do_domain_clone(conn, domains, domain, copy_on_write=False)
+            if newDomain is not None:
+                return interact_with_vm(conn, domains, newDomain)
 
         if config.exit_after_action:
             sys.exit(0)
 
 
+def do_domain_snapshot(conn: libvirt.virConnect, domain: Domain):
+    """Create a domain snapshot"""
+
+
 def do_domain_clone(
     conn: libvirt.virConnect, domains: List[Domain], domain: Domain, copy_on_write: bool
-):
+) -> Domain | None:
     """Create a linked clone of the specified domain"""
 
     # Lookup the domain information
@@ -332,7 +340,7 @@ def do_domain_clone(
     # Ask for the new VM name
     new_name = Fzf.ask(f"domain-linked-clone[{domain.path}] clone name> ")
     if new_name is None:
-        return
+        return None
 
     new_uuid = uuid.uuid4()
 
@@ -380,7 +388,10 @@ def do_domain_clone(
         ElementTree.tostring(root, encoding="unicode", method="xml")
     )
 
-    domains.append(Domain.from_virdomain(cloneInfo))
+    newDomain = Domain.from_virdomain(cloneInfo)
+    domains.append(newDomain)
+
+    return newDomain
 
 
 def do_domain_disk_clone(
